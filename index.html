@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kid's Tapping Game</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: lightblue;
+        }
+        div {
+            text-align: center;
+        }
+        canvas {
+            border: 1px solid black;
+            touch-action: none; /* Prevents default touch behaviors */
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <p>Tap or click the falling circles to score points!</p>
+        <canvas id="gameCanvas" width="400" height="600"></canvas>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const WIDTH = canvas.width;
+        const HEIGHT = canvas.height;
+        const COLORS = ['red', 'blue', 'green', 'yellow', 'purple'];
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const INITIAL_SPEED = 2;
+        const SPEED_INCREMENT_PER_LEVEL = 0.5;
+        const INITIAL_INTERVAL = 1000; // ms
+        const INTERVAL_DECREMENT_PER_LEVEL = 100; // ms
+        const MIN_INTERVAL = 200; // ms
+
+        let circles = [];
+        let score = 0;
+        let currentLevel = 0;
+        let fallSpeed = INITIAL_SPEED;
+        let circleTimer = setInterval(addCircle, INITIAL_INTERVAL);
+
+        function createCircle() {
+            const radius = 10 + Math.random() * (WIDTH / 20);
+            return {
+                x: Math.random() * (WIDTH - 2 * radius) + radius,
+                y: 0,
+                radius: radius,
+                color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                isTapped: false,
+                animationFrame: 0
+            };
+        }
+
+        function addCircle() {
+            circles.push(createCircle());
+        }
+
+        function update() {
+            const toRemove = [];
+            circles.forEach(circle => {
+                if (!circle.isTapped) {
+                    circle.y += fallSpeed;
+                    if (circle.y - circle.radius > HEIGHT) {
+                        toRemove.push(circle);
+                    }
+                } else {
+                    circle.animationFrame++;
+                    if (circle.animationFrame > 10) {
+                        toRemove.push(circle);
+                    }
+                }
+            });
+            circles = circles.filter(c => !toRemove.includes(c));
+        }
+
+        function draw() {
+            ctx.fillStyle = 'lightblue';
+            ctx.fillRect(0, 0, WIDTH, HEIGHT);
+            circles.forEach(circle => {
+                ctx.save();
+                if (circle.isTapped) {
+                    const scale = 1 + 0.1 * circle.animationFrame;
+                    const alpha = 1 - 0.1 * circle.animationFrame;
+                    ctx.globalAlpha = alpha;
+                    ctx.beginPath();
+                    ctx.arc(circle.x, circle.y, circle.radius * scale, 0, Math.PI * 2);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
+                }
+                ctx.fillStyle = circle.color;
+                ctx.fill();
+                ctx.restore();
+            });
+            ctx.font = '20px Arial';
+            ctx.fillStyle = 'darkblue';
+            ctx.fillText(`Score: ${score}`, 10, 30);
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameLoop();
+
+        function playPopSound() {
+            const oscillator = audioCtx.createOscillator();
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(440, audioCtx.currentTime); // A4 note
+            oscillator.connect(audioCtx.destination);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.1); // Play for 0.1 seconds
+        }
+
+        function handleTap(event) {
+            event.preventDefault(); // For touchstart
+            let clientX, clientY;
+            if (event.type === 'touchstart') {
+                const touch = event.touches[0];
+                clientX = touch.clientX;
+                clientY = touch.clientY;
+            } else if (event.type === 'mousedown') {
+                clientX = event.clientX;
+                clientY = event.clientY;
+            }
+            const rect = canvas.getBoundingClientRect();
+            const canvasX = clientX - rect.left;
+            const canvasY = clientY - rect.top;
+            circles.forEach(circle => {
+                if (!circle.isTapped) {
+                    const dx = canvasX - circle.x;
+                    const dy = canvasY - circle.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < circle.radius) {
+                        circle.isTapped = true;
+                        circle.animationFrame = 0;
+                        playPopSound();
+                        score++;
+                        const newLevel = Math.floor(score / 10);
+                        if (newLevel > currentLevel) {
+                            currentLevel = newLevel;
+                            fallSpeed = INITIAL_SPEED + currentLevel * SPEED_INCREMENT_PER_LEVEL;
+                            const newInterval = Math.max(MIN_INTERVAL, INITIAL_INTERVAL - currentLevel * INTERVAL_DECREMENT_PER_LEVEL);
+                            clearInterval(circleTimer);
+                            circleTimer = setInterval(addCircle, newInterval);
+                        }
+                    }
+                }
+            });
+        }
+
+        canvas.addEventListener('touchstart', handleTap, { passive: false });
+        canvas.addEventListener('mousedown', handleTap);
+    </script>
+</body>
+</html>
